@@ -7,8 +7,8 @@
         mc:Ignorable="d"
         Title="DTR Cutoff Checker"
         Icon="app_icon.png"
-        MinHeight="780"
-        MinWidth="1280"
+        MinHeight="520"
+        MinWidth="760"
         Height="900"
         Width="1500"
         FontFamily="Segoe UI"
@@ -387,7 +387,8 @@
         </Style>
     </Window.Resources>
 
-    <Grid>
+    <Viewbox Stretch="Uniform">
+    <Grid Width="1500" Height="900">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -1443,4 +1444,5 @@
             </Border>
         </Grid>
     </Grid>
+    </Viewbox>
 </Window>

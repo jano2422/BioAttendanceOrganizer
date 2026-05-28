@@ -70,11 +70,11 @@ public sealed class CorrectionPersistenceTests
         var loaded = TempDatabase().LoadRules();
 
         Assert.Equal(TimeSpan.FromMinutes(2), loaded.DuplicateTapWindow);
-        Assert.Equal(TimeSpan.FromHours(4), loaded.MinimumWorkDuration);
+        Assert.Equal(TimeSpan.FromHours(1), loaded.MinimumWorkDuration);
         Assert.Equal(TimeSpan.FromHours(20), loaded.MaximumWorkDuration);
         Assert.Equal(new TimeSpan(12, 0, 0), loaded.DayStartEnd);
         Assert.Equal(new TimeSpan(12, 0, 0), loaded.DayEndStart);
-        Assert.Equal(new TimeSpan(20, 0, 0), loaded.DayEndEnd);
+        Assert.Equal(new TimeSpan(4, 0, 0), loaded.DayEndEnd);
         Assert.Equal(new TimeSpan(4, 0, 0), loaded.NightPairStart);
         Assert.Equal(new TimeSpan(16, 0, 0), loaded.StrongNightStart);
         Assert.Equal(new TimeSpan(10, 0, 0), loaded.NightEndEnd);

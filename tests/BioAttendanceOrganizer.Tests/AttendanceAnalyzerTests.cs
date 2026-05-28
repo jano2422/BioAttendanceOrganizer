@@ -167,11 +167,17 @@ public sealed class AttendanceAnalyzerTests
     [Fact]
     public void MorningImportDoesNotPairCrossMidnightOutWhenDayEndWindowDoesNotWrap()
     {
-        var report = _analyzer.Analyze(Workbook(
-            DtrImportSlot.Morning,
-            new DateTime(2026, 5, 24, 5, 8, 0),
-            new DateTime(2026, 5, 25, 0, 3, 0),
-            new DateTime(2026, 5, 25, 5, 53, 0)));
+        var report = _analyzer.Analyze(
+            Workbook(
+                DtrImportSlot.Morning,
+                new DateTime(2026, 5, 24, 5, 8, 0),
+                new DateTime(2026, 5, 25, 0, 3, 0),
+                new DateTime(2026, 5, 25, 5, 53, 0)),
+            new AttendanceRules
+            {
+                DayEndStart = new TimeSpan(12, 0, 0),
+                DayEndEnd = new TimeSpan(20, 0, 0)
+            });
 
         var rows = NonNoRecord(report).ToList();
         Assert.DoesNotContain(rows, x =>

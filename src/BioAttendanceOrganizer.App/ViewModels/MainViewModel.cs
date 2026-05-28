@@ -75,11 +75,11 @@ public sealed class MainViewModel : ObservableObject
     private string _editorAutoFlagsPreview = "-";
     private string _editorRawPunches = string.Empty;
     private string _duplicateTapMinutes = "2";
-    private string _minimumWorkHours = "4";
+    private string _minimumWorkHours = "1";
     private string _maximumWorkHours = "20";
     private string _dayStartEnd = "12:00";
     private string _dayEndStart = "12:00";
-    private string _dayEndEnd = "20:00";
+    private string _dayEndEnd = "04:00";
     private string _nightPairStart = "04:00";
     private string _strongNightStart = "16:00";
     private string _nightEndEnd = "10:00";
