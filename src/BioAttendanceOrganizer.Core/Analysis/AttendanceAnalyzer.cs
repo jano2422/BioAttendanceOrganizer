@@ -50,6 +50,7 @@ public sealed class AttendanceAnalyzer
         while (index < nodes.Count)
         {
             if (rules.EnableCarryoverBoundaryDetection &&
+                workbook.DetectedSlot != DtrImportSlot.Morning &&
                 IsStartBoundaryCarryoverBeforeNight(nodes, index, workbook.PeriodStart, rules))
             {
                 records.Add(CreateSinglePunchRecord(
@@ -63,7 +64,7 @@ public sealed class AttendanceAnalyzer
                 continue;
             }
 
-            var candidate = FindBestPair(nodes, index, rules);
+            var candidate = FindBestPair(nodes, index, workbook.DetectedSlot, rules);
             if (candidate is not null)
             {
                 var record = CreatePairedRecord(employee, nodes, index, candidate.Value.EndIndex, candidate.Value, rules);
@@ -123,7 +124,7 @@ public sealed class AttendanceAnalyzer
         }
     }
 
-    private static PairCandidate? FindBestPair(IReadOnlyList<PunchNode> nodes, int startIndex, AttendanceRules rules)
+    private static PairCandidate? FindBestPair(IReadOnlyList<PunchNode> nodes, int startIndex, DtrImportSlot slot, AttendanceRules rules)
     {
         var start = nodes[startIndex].Primary.Timestamp;
         PairCandidate? best = null;
@@ -147,7 +148,7 @@ public sealed class AttendanceAnalyzer
                 continue;
             }
 
-            var candidate = ScorePair(start, end, endIndex, rules);
+            var candidate = ScorePair(start, end, endIndex, slot, rules);
             if (candidate is null)
             {
                 continue;
@@ -164,7 +165,7 @@ public sealed class AttendanceAnalyzer
         return best;
     }
 
-    private static PairCandidate? ScorePair(DateTime start, DateTime end, int endIndex, AttendanceRules rules)
+    private static PairCandidate? ScorePair(DateTime start, DateTime end, int endIndex, DtrImportSlot slot, AttendanceRules rules)
     {
         var duration = end - start;
         var startTime = TimeOnly.FromDateTime(start);
@@ -172,17 +173,20 @@ public sealed class AttendanceAnalyzer
         var sameDay = start.Date == end.Date;
         var nextDay = end.Date == start.Date.AddDays(1);
 
-        if (sameDay && IsDayStart(startTime, rules) && IsDayEnd(endTime, rules))
+        if (slot == DtrImportSlot.Morning &&
+            IsDayStart(startTime, rules) &&
+            ((sameDay && IsDayEnd(endTime, rules)) ||
+             (nextDay && IsCrossMidnightDayEnd(endTime, rules))))
         {
             return new PairCandidate(endIndex, AttendanceStatus.CleanDayShift, duration, 0.96);
         }
 
-        if (nextDay && IsNightStartForPair(startTime, rules) && IsNightEnd(endTime, rules))
+        if (slot == DtrImportSlot.Night && nextDay && IsNightStartForPair(startTime, rules) && IsNightEnd(endTime, rules))
         {
             return new PairCandidate(endIndex, AttendanceStatus.LikelyNightShift, duration, 0.92);
         }
 
-        if ((sameDay || nextDay) && IsPlausibleEndpoint(startTime, endTime, sameDay, rules))
+        if ((sameDay || nextDay) && IsPlausibleEndpoint(startTime, endTime, sameDay, slot, rules))
         {
             return new PairCandidate(endIndex, AttendanceStatus.NeedsReview, duration, 0.62);
         }
@@ -300,32 +304,43 @@ public sealed class AttendanceAnalyzer
         var confidence = flags.Contains(IssueFlag.DuplicateTap) ? 0.45 : 0.55;
 
         AttendanceStatus status;
-        if (rules.EnableCarryoverBoundaryDetection && date == workbook.PeriodStart && IsNightEnd(time, rules))
+        if (workbook.DetectedSlot == DtrImportSlot.Night &&
+            rules.EnableCarryoverBoundaryDetection &&
+            date == workbook.PeriodStart &&
+            IsNightEnd(time, rules))
         {
             status = AttendanceStatus.CarryoverFromPreviousCutoff;
             flags.Add(IssueFlag.Carryover);
             flags.Add(IssueFlag.BoundaryPunch);
             confidence = 0.82;
         }
-        else if (rules.EnableCarryoverBoundaryDetection && date == workbook.PeriodEnd && IsStrongNightStart(time, rules))
+        else if (workbook.DetectedSlot == DtrImportSlot.Night &&
+                 rules.EnableCarryoverBoundaryDetection &&
+                 date == workbook.PeriodEnd &&
+                 IsStrongNightStart(time, rules))
         {
             status = AttendanceStatus.CarryoverToNextCutoff;
             flags.Add(IssueFlag.Carryover);
             flags.Add(IssueFlag.BoundaryPunch);
             confidence = 0.82;
         }
-        else if (IsStrongNightStart(time, rules))
+        else if (workbook.DetectedSlot == DtrImportSlot.Night && IsStrongNightStart(time, rules))
         {
             status = AttendanceStatus.MissingOut;
             flags.Add(IssueFlag.LikelyNightShift);
             flags.Add(IssueFlag.MissingOut);
         }
-        else if (IsDayEnd(time, rules))
+        else if (workbook.DetectedSlot == DtrImportSlot.Night && IsNightEnd(time, rules))
         {
             status = AttendanceStatus.MissingIn;
             flags.Add(IssueFlag.MissingIn);
         }
-        else if (IsDayStart(time, rules) || IsNightEnd(time, rules))
+        else if (workbook.DetectedSlot == DtrImportSlot.Morning && IsDayEnd(time, rules))
+        {
+            status = AttendanceStatus.MissingIn;
+            flags.Add(IssueFlag.MissingIn);
+        }
+        else if (workbook.DetectedSlot == DtrImportSlot.Morning && IsDayStart(time, rules))
         {
             status = AttendanceStatus.MissingOut;
             flags.Add(IssueFlag.MissingOut);
@@ -442,7 +457,18 @@ public sealed class AttendanceAnalyzer
     private static bool IsDayEnd(TimeOnly time, AttendanceRules rules)
     {
         var value = time.ToTimeSpan();
+        if (rules.DayEndEnd < rules.DayEndStart)
+        {
+            return value >= rules.DayEndStart || value <= rules.DayEndEnd;
+        }
+
         return value >= rules.DayEndStart && value <= rules.DayEndEnd;
+    }
+
+    private static bool IsCrossMidnightDayEnd(TimeOnly time, AttendanceRules rules)
+    {
+        return rules.DayEndEnd < rules.DayEndStart &&
+               time.ToTimeSpan() <= rules.DayEndEnd;
     }
 
     private static bool IsNightStartForPair(TimeOnly time, AttendanceRules rules)
@@ -460,14 +486,18 @@ public sealed class AttendanceAnalyzer
         return time.ToTimeSpan() <= rules.NightEndEnd;
     }
 
-    private static bool IsPlausibleEndpoint(TimeOnly start, TimeOnly end, bool sameDay, AttendanceRules rules)
+    private static bool IsPlausibleEndpoint(TimeOnly start, TimeOnly end, bool sameDay, DtrImportSlot slot, AttendanceRules rules)
     {
-        if (sameDay)
+        if (slot == DtrImportSlot.Morning)
         {
-            return start < end && (IsDayStart(start, rules) || IsNightStartForPair(start, rules));
+            return IsDayStart(start, rules) &&
+                   (sameDay || IsCrossMidnightDayEnd(end, rules));
         }
 
-        return IsNightStartForPair(start, rules) && IsNightEnd(end, rules);
+        return slot == DtrImportSlot.Night &&
+               !sameDay &&
+               IsNightStartForPair(start, rules) &&
+               IsNightEnd(end, rules);
     }
 
     private static IEnumerable<DateOnly> EnumerateDates(DateOnly start, DateOnly end)

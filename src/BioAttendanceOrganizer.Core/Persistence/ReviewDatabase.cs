@@ -19,20 +19,21 @@ public sealed class ReviewDatabase
     {
         using var connection = OpenConnection();
         var values = LoadSettingMap(connection);
+        var defaults = AttendanceRules.CreateDefault();
 
         return new AttendanceRules
         {
-            DuplicateTapWindow = TimeSpan.FromMinutes(GetDouble(values, "DuplicateTapMinutes", 2)),
-            MinimumWorkDuration = TimeSpan.FromHours(GetDouble(values, "MinimumWorkHours", 4)),
-            MaximumWorkDuration = TimeSpan.FromHours(GetDouble(values, "MaximumWorkHours", 20)),
-            DayStartEnd = ParseTime(values, "DayStartEnd", new TimeSpan(12, 0, 0)),
-            DayEndStart = ParseTime(values, "DayEndStart", new TimeSpan(12, 0, 0)),
-            DayEndEnd = ParseTime(values, "DayEndEnd", new TimeSpan(20, 0, 0)),
-            NightPairStart = ParseTime(values, "NightPairStart", new TimeSpan(16, 0, 0)),
-            StrongNightStart = ParseTime(values, "StrongNightStart", new TimeSpan(20, 0, 0)),
-            NightEndEnd = ParseTime(values, "NightEndEnd", new TimeSpan(10, 0, 0)),
-            EnableCarryoverBoundaryDetection = GetBool(values, "EnableCarryoverBoundaryDetection", true),
-            AutoApproveCleanNightShifts = GetBool(values, "AutoApproveCleanNightShifts", true)
+            DuplicateTapWindow = TimeSpan.FromMinutes(GetDouble(values, "DuplicateTapMinutes", defaults.DuplicateTapWindow.TotalMinutes)),
+            MinimumWorkDuration = TimeSpan.FromHours(GetDouble(values, "MinimumWorkHours", defaults.MinimumWorkDuration.TotalHours)),
+            MaximumWorkDuration = TimeSpan.FromHours(GetDouble(values, "MaximumWorkHours", defaults.MaximumWorkDuration.TotalHours)),
+            DayStartEnd = ParseTime(values, "DayStartEnd", defaults.DayStartEnd),
+            DayEndStart = ParseTime(values, "DayEndStart", defaults.DayEndStart),
+            DayEndEnd = ParseTime(values, "DayEndEnd", defaults.DayEndEnd),
+            NightPairStart = ParseTime(values, "NightPairStart", defaults.NightPairStart),
+            StrongNightStart = ParseTime(values, "StrongNightStart", defaults.StrongNightStart),
+            NightEndEnd = ParseTime(values, "NightEndEnd", defaults.NightEndEnd),
+            EnableCarryoverBoundaryDetection = GetBool(values, "EnableCarryoverBoundaryDetection", defaults.EnableCarryoverBoundaryDetection),
+            AutoApproveCleanNightShifts = GetBool(values, "AutoApproveCleanNightShifts", defaults.AutoApproveCleanNightShifts)
         };
     }
 

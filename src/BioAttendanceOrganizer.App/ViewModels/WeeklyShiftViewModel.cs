@@ -24,7 +24,7 @@ public sealed class WeeklyShiftViewModel
                                Record.FinalStatus == AttendanceStatus.CarryoverToNextCutoff
         ? string.Empty
         : Record.IsOvernightShift
-            ? "Night shift"
+            ? "Extended"
             : string.Empty;
     public bool HasBadge => !string.IsNullOrWhiteSpace(BadgeText);
     public string RawPunchSummary => BuildRawPunchSummary(Record.RawPunches);

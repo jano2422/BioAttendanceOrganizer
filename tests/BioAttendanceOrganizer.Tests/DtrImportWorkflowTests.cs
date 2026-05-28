@@ -86,15 +86,17 @@ public sealed class DtrImportWorkflowTests
     }
 
     [Fact]
-    public void InferCutoffRejectsNoMatchingCutoff()
+    public void NightInferCutoffAllowsPartialOverlap()
     {
         var result = new DtrImportWorkflowService().InferCutoff(
-            Workbook(new DateOnly(2026, 4, 2), new DateOnly(2026, 4, 15)),
-            currentYear: 2026);
+            Workbook(new DateOnly(2026, 5, 16), new DateOnly(2026, 5, 24)),
+            currentYear: 2026,
+            slot: DtrImportSlot.Night);
 
-        Assert.False(result.IsValid);
-        Assert.Null(result.Cutoff);
-        Assert.Contains("does not match", result.Title, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.IsValid);
+        Assert.NotNull(result.Cutoff);
+        Assert.Equal(new DateOnly(2026, 5, 16), result.Cutoff.StartDate);
+        Assert.Equal(new DateOnly(2026, 5, 31), result.Cutoff.EndDate);
     }
 
     [Fact]
@@ -130,7 +132,7 @@ public sealed class DtrImportWorkflowTests
             CutoffPeriod.Create(2026, 4, 1));
 
         Assert.True(result.IsValid);
-        Assert.Contains("boundary overlap", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("imported period only", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -166,7 +168,7 @@ public sealed class DtrImportWorkflowTests
             CutoffPeriod.Create(2026, 4, 1));
 
         Assert.True(result.IsValid);
-        Assert.Contains("boundary overlap", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("imported period only", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -182,15 +184,15 @@ public sealed class DtrImportWorkflowTests
     }
 
     [Fact]
-    public void NightImportValidationRejectsPartialMorningPeriod()
+    public void NightImportValidationAllowsPartialOverlap()
     {
         var result = new DtrImportWorkflowService().ValidateDtrOnly(
             Workbook(new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 9)),
             CutoffPeriod.Create(2026, 5, 1),
             DtrImportSlot.Night);
 
-        Assert.False(result.IsValid);
-        Assert.Contains("does not match", result.Title, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.IsValid);
+        Assert.Contains("imported period only", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -206,11 +208,12 @@ public sealed class DtrImportWorkflowTests
     }
 
     [Fact]
-    public void ImportValidationRejectsWorkbookPeriodMismatchBeyondNightShiftBoundary()
+    public void NightImportValidationRejectsNoOverlap()
     {
         var result = new DtrImportWorkflowService().ValidateDtrOnly(
-            Workbook(new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 17)),
-            CutoffPeriod.Create(2026, 4, 1));
+            Workbook(new DateOnly(2026, 4, 17), new DateOnly(2026, 4, 30)),
+            CutoffPeriod.Create(2026, 4, 1),
+            DtrImportSlot.Night);
 
         Assert.False(result.IsValid);
         Assert.Contains("does not match", result.Title, StringComparison.OrdinalIgnoreCase);

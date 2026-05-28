@@ -12,6 +12,7 @@ public sealed class AttendanceAnalyzerTests
     public void PairsCleanDayShiftFromSameDayPunches()
     {
         var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Morning,
             new DateTime(2026, 4, 1, 6, 0, 0),
             new DateTime(2026, 4, 1, 17, 5, 0)));
 
@@ -80,7 +81,7 @@ public sealed class AttendanceAnalyzerTests
     }
 
     [Fact]
-    public void MarksFirstMorningPunchAsPreviousCutoffWhenNightPairFollows()
+    public void NightImportMarksFirstMorningPunchAsPreviousCutoffWhenNightPairFollows()
     {
         var report = _analyzer.Analyze(Workbook(
             new DateTime(2026, 4, 1, 6, 0, 0),
@@ -98,9 +99,136 @@ public sealed class AttendanceAnalyzerTests
     }
 
     [Fact]
+    public void MorningImportDoesNotMarkFirstMorningPunchAsPreviousCutoffWhenNightPairFollows()
+    {
+        var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Morning,
+            new DateTime(2026, 4, 1, 6, 0, 0),
+            new DateTime(2026, 4, 1, 18, 0, 0),
+            new DateTime(2026, 4, 2, 6, 0, 0)));
+
+        var rows = NonNoRecord(report).ToList();
+        Assert.DoesNotContain(rows, x => x.Status == AttendanceStatus.CarryoverFromPreviousCutoff);
+        Assert.DoesNotContain(rows, x => x.Flags.Contains(IssueFlag.Carryover));
+        Assert.Equal(0, report.Summary.CarryoverRows);
+    }
+
+    [Fact]
+    public void MorningImportDoesNotRecognizeNightPair()
+    {
+        var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Morning,
+            new DateTime(2026, 4, 1, 18, 0, 0),
+            new DateTime(2026, 4, 2, 6, 0, 0)));
+
+        var rows = NonNoRecord(report).ToList();
+        Assert.DoesNotContain(rows, x => x.Status == AttendanceStatus.LikelyNightShift);
+        Assert.DoesNotContain(rows, x => x.Flags.Contains(IssueFlag.LikelyNightShift));
+    }
+
+    [Fact]
+    public void NightImportDoesNotRecognizeDayPair()
+    {
+        var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Night,
+            new DateTime(2026, 4, 1, 6, 0, 0),
+            new DateTime(2026, 4, 1, 17, 5, 0)));
+
+        var rows = NonNoRecord(report).ToList();
+        Assert.DoesNotContain(rows, x => x.Status == AttendanceStatus.CleanDayShift);
+    }
+
+    [Fact]
+    public void MorningImportPairsCrossMidnightOutWhenDayEndWindowWraps()
+    {
+        var report = _analyzer.Analyze(
+            Workbook(
+                DtrImportSlot.Morning,
+                new DateTime(2026, 5, 24, 5, 8, 0),
+                new DateTime(2026, 5, 25, 0, 3, 0),
+                new DateTime(2026, 5, 25, 5, 53, 0)),
+            new AttendanceRules
+            {
+                DayEndStart = new TimeSpan(12, 0, 0),
+                DayEndEnd = new TimeSpan(4, 0, 0)
+            });
+
+        var rows = NonNoRecord(report).ToList();
+        var may24 = Assert.Single(rows, x => x.WorkDate == new DateOnly(2026, 5, 24));
+        Assert.Equal(AttendanceStatus.CleanDayShift, may24.Status);
+        Assert.Equal(new DateTime(2026, 5, 24, 5, 8, 0), may24.TimeIn);
+        Assert.Equal(new DateTime(2026, 5, 25, 0, 3, 0), may24.TimeOut);
+
+        var may25 = Assert.Single(rows, x => x.WorkDate == new DateOnly(2026, 5, 25));
+        Assert.Equal(AttendanceStatus.MissingOut, may25.Status);
+        Assert.Equal(new DateTime(2026, 5, 25, 5, 53, 0), may25.TimeIn);
+    }
+
+    [Fact]
+    public void MorningImportDoesNotPairCrossMidnightOutWhenDayEndWindowDoesNotWrap()
+    {
+        var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Morning,
+            new DateTime(2026, 5, 24, 5, 8, 0),
+            new DateTime(2026, 5, 25, 0, 3, 0),
+            new DateTime(2026, 5, 25, 5, 53, 0)));
+
+        var rows = NonNoRecord(report).ToList();
+        Assert.DoesNotContain(rows, x =>
+            x.Status == AttendanceStatus.CleanDayShift &&
+            x.TimeIn == new DateTime(2026, 5, 24, 5, 8, 0) &&
+            x.TimeOut == new DateTime(2026, 5, 25, 0, 3, 0));
+    }
+
+    [Fact]
+    public void NoRecordRowsStayWithinImportedWorkbookPeriod()
+    {
+        var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Morning,
+            new DateOnly(2026, 5, 24),
+            new DateOnly(2026, 5, 27),
+            new DateTime(2026, 5, 24, 5, 8, 0),
+            new DateTime(2026, 5, 24, 18, 0, 0)));
+
+        var noRecordDates = report.Records
+            .Where(x => x.Status == AttendanceStatus.NoRecord)
+            .Select(x => x.WorkDate)
+            .ToList();
+
+        Assert.Equal([new DateOnly(2026, 5, 25), new DateOnly(2026, 5, 26), new DateOnly(2026, 5, 27)], noRecordDates);
+        Assert.DoesNotContain(noRecordDates, x => x < new DateOnly(2026, 5, 24) || x > new DateOnly(2026, 5, 27));
+    }
+
+    [Fact]
+    public void RawPunchDateUsedAsPreviousDayOutSuppressesNoRecordForThatDate()
+    {
+        var report = _analyzer.Analyze(
+            Workbook(
+                DtrImportSlot.Morning,
+                new DateOnly(2026, 5, 24),
+                new DateOnly(2026, 5, 27),
+                new DateTime(2026, 5, 24, 5, 8, 0),
+                new DateTime(2026, 5, 25, 0, 3, 0)),
+            new AttendanceRules
+            {
+                DayEndStart = new TimeSpan(12, 0, 0),
+                DayEndEnd = new TimeSpan(4, 0, 0)
+            });
+
+        Assert.Contains(report.Records, x =>
+            x.WorkDate == new DateOnly(2026, 5, 24) &&
+            x.Status == AttendanceStatus.CleanDayShift &&
+            x.TimeOut == new DateTime(2026, 5, 25, 0, 3, 0));
+        Assert.DoesNotContain(report.Records, x =>
+            x.WorkDate == new DateOnly(2026, 5, 25) &&
+            x.Status == AttendanceStatus.NoRecord);
+    }
+
+    [Fact]
     public void FlagsDuplicateTapWithoutInventingMissingOut()
     {
         var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Morning,
             new DateTime(2026, 4, 2, 6, 0, 0),
             new DateTime(2026, 4, 2, 6, 1, 0)));
 
@@ -115,6 +243,7 @@ public sealed class AttendanceAnalyzerTests
     public void DuplicateTapOnRecognizedDayShiftIsNotNeedsChecking()
     {
         var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Morning,
             new DateTime(2026, 4, 2, 6, 0, 0),
             new DateTime(2026, 4, 2, 6, 1, 0),
             new DateTime(2026, 4, 2, 17, 5, 0)));
@@ -132,6 +261,7 @@ public sealed class AttendanceAnalyzerTests
     public void UsesBestPairAndFlagsExtraPunches()
     {
         var report = _analyzer.Analyze(Workbook(
+            DtrImportSlot.Morning,
             new DateTime(2026, 4, 1, 6, 6, 0),
             new DateTime(2026, 4, 1, 11, 59, 0),
             new DateTime(2026, 4, 1, 17, 44, 0),
@@ -173,6 +303,20 @@ public sealed class AttendanceAnalyzerTests
 
     private static BiometricWorkbook Workbook(params DateTime[] punches)
     {
+        return Workbook(DtrImportSlot.Night, punches);
+    }
+
+    private static BiometricWorkbook Workbook(DtrImportSlot slot, params DateTime[] punches)
+    {
+        return Workbook(slot, new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 16), punches);
+    }
+
+    private static BiometricWorkbook Workbook(
+        DtrImportSlot slot,
+        DateOnly periodStart,
+        DateOnly periodEnd,
+        params DateTime[] punches)
+    {
         var employee = new EmployeeInfo("1", "Sample Employee", "SECURITY");
         var rawPunches = punches
             .Select((timestamp, index) => new RawPunch(
@@ -189,10 +333,11 @@ public sealed class AttendanceAnalyzerTests
 
         return new BiometricWorkbook(
             "sample.xls",
-            new DateOnly(2026, 4, 1),
-            new DateOnly(2026, 4, 16),
+            periodStart,
+            periodEnd,
             new[] { employee },
-            rawPunches);
+            rawPunches,
+            slot);
     }
 
     private static AttendanceRecord OnlyNonNoRecord(AttendanceReport report)
