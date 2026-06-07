@@ -4,6 +4,9 @@ namespace BioAttendanceOrganizer.Core.Analysis;
 
 public sealed class AttendanceAnalyzer
 {
+    private static readonly TimeSpan PreviousNightDayStart = new(23, 0, 0);
+    private static readonly TimeSpan LateNightEnd = new(13, 0, 0);
+
     public AttendanceReport Analyze(BiometricWorkbook workbook, AttendanceRules? rules = null)
     {
         rules ??= new AttendanceRules();
@@ -154,15 +157,34 @@ public sealed class AttendanceAnalyzer
                 continue;
             }
 
-            if (best is null ||
-                candidate.Value.Score > best.Value.Score ||
-                (Math.Abs(candidate.Value.Score - best.Value.Score) < 0.001 && duration > best.Value.Duration))
+            if (IsBetterCandidate(candidate.Value, best))
             {
                 best = candidate;
             }
         }
 
         return best;
+    }
+
+    private static bool IsBetterCandidate(PairCandidate candidate, PairCandidate? best)
+    {
+        if (best is null)
+        {
+            return true;
+        }
+
+        if (candidate.Score > best.Value.Score)
+        {
+            return true;
+        }
+
+        if (candidate.Score < best.Value.Score)
+        {
+            return false;
+        }
+
+        return candidate.Rank > best.Value.Rank ||
+               (candidate.Rank == best.Value.Rank && candidate.Duration > best.Value.Duration);
     }
 
     private static PairCandidate? ScorePair(DateTime start, DateTime end, int endIndex, DtrImportSlot slot, AttendanceRules rules)
@@ -178,17 +200,31 @@ public sealed class AttendanceAnalyzer
             ((sameDay && IsDayEnd(endTime, rules)) ||
              (nextDay && IsCrossMidnightDayEnd(endTime, rules))))
         {
-            return new PairCandidate(endIndex, AttendanceStatus.CleanDayShift, duration, 0.96);
+            var rank = sameDay && !IsPreviousNightDayStart(endTime) ? 1 : 0;
+            return new PairCandidate(endIndex, AttendanceStatus.CleanDayShift, duration, 0.96, rank, false);
+        }
+
+        if (slot == DtrImportSlot.Morning &&
+            IsPreviousNightDayStart(startTime) &&
+            nextDay &&
+            IsDayEnd(endTime, rules))
+        {
+            return new PairCandidate(endIndex, AttendanceStatus.CleanDayShift, duration, 0.96, 1, true);
         }
 
         if (slot == DtrImportSlot.Night && nextDay && IsNightStartForPair(startTime, rules) && IsNightEnd(endTime, rules))
         {
-            return new PairCandidate(endIndex, AttendanceStatus.LikelyNightShift, duration, 0.92);
+            return new PairCandidate(endIndex, AttendanceStatus.LikelyNightShift, duration, 0.92, 1, false);
+        }
+
+        if (slot == DtrImportSlot.Night && nextDay && IsStrongNightStart(startTime, rules) && IsLateNightEnd(endTime, rules))
+        {
+            return new PairCandidate(endIndex, AttendanceStatus.LikelyNightShift, duration, 0.88, 1, false);
         }
 
         if ((sameDay || nextDay) && IsPlausibleEndpoint(startTime, endTime, sameDay, slot, rules))
         {
-            return new PairCandidate(endIndex, AttendanceStatus.NeedsReview, duration, 0.62);
+            return new PairCandidate(endIndex, AttendanceStatus.NeedsReview, duration, 0.62, 1, false);
         }
 
         return null;
@@ -274,13 +310,16 @@ public sealed class AttendanceAnalyzer
 
         var start = nodes[startIndex].Primary.Timestamp;
         var end = nodes[endIndex].Primary.Timestamp;
+        var workDate = candidate.WorkDateFromEnd
+            ? DateOnly.FromDateTime(end)
+            : DateOnly.FromDateTime(start);
 
         return new AttendanceRecord
         {
             EmployeeId = employee.Id,
             EmployeeName = employee.Name,
             Department = employee.Department,
-            WorkDate = DateOnly.FromDateTime(start),
+            WorkDate = workDate,
             TimeIn = start,
             TimeOut = end,
             Status = candidate.Status,
@@ -486,6 +525,17 @@ public sealed class AttendanceAnalyzer
         return time.ToTimeSpan() <= rules.NightEndEnd;
     }
 
+    private static bool IsLateNightEnd(TimeOnly time, AttendanceRules rules)
+    {
+        var value = time.ToTimeSpan();
+        return value > rules.NightEndEnd && value <= LateNightEnd;
+    }
+
+    private static bool IsPreviousNightDayStart(TimeOnly time)
+    {
+        return time.ToTimeSpan() >= PreviousNightDayStart;
+    }
+
     private static bool IsPlausibleEndpoint(TimeOnly start, TimeOnly end, bool sameDay, DtrImportSlot slot, AttendanceRules rules)
     {
         if (slot == DtrImportSlot.Morning)
@@ -523,5 +573,7 @@ public sealed class AttendanceAnalyzer
         int EndIndex,
         AttendanceStatus Status,
         TimeSpan Duration,
-        double Score);
+        double Score,
+        int Rank,
+        bool WorkDateFromEnd);
 }

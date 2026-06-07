@@ -278,34 +278,42 @@ public sealed class BiometricWorkbookParser
             }
 
             var dateHeaderRowIndex = rowIndex + 1;
-            var punchRowIndex = rowIndex + 2;
-            if (punchRowIndex >= sheet.Rows.Count)
+            var firstPunchRowIndex = rowIndex + 2;
+            if (firstPunchRowIndex >= sheet.Rows.Count)
             {
                 continue;
             }
 
             var dateHeaders = ReadDateHeaders(sheet.Rows[dateHeaderRowIndex], start, end);
-            var punchRow = sheet.Rows[punchRowIndex];
-            foreach (var header in dateHeaders)
+            for (var punchRowIndex = firstPunchRowIndex; punchRowIndex < sheet.Rows.Count; punchRowIndex++)
             {
-                if (header.ColumnIndex >= punchRow.ItemArray.Length)
+                var punchRow = sheet.Rows[punchRowIndex];
+                if (IsMorningEmployeeHeaderRow(punchRow))
                 {
-                    continue;
+                    break;
                 }
 
-                var rawCell = GetCell(punchRow, header.ColumnIndex);
-                foreach (var time in ParseTimes(rawCell))
+                foreach (var header in dateHeaders)
                 {
-                    punches.Add(new RawPunch(
-                        employee.Id,
-                        employee.Name,
-                        employee.Department,
-                        header.Date.ToDateTime(time),
-                        header.Date.Day,
-                        NormalizeRawCell(rawCell),
-                        sheet.TableName,
-                        punchRowIndex + 1,
-                        header.ColumnIndex + 1));
+                    if (header.ColumnIndex >= punchRow.ItemArray.Length)
+                    {
+                        continue;
+                    }
+
+                    var rawCell = GetCell(punchRow, header.ColumnIndex);
+                    foreach (var time in ParseTimes(rawCell))
+                    {
+                        punches.Add(new RawPunch(
+                            employee.Id,
+                            employee.Name,
+                            employee.Department,
+                            header.Date.ToDateTime(time),
+                            header.Date.Day,
+                            NormalizeRawCell(rawCell),
+                            sheet.TableName,
+                            punchRowIndex + 1,
+                            header.ColumnIndex + 1));
+                    }
                 }
             }
         }
@@ -324,6 +332,19 @@ public sealed class BiometricWorkbookParser
         employee = new EmployeeInfo(id, name, department);
 
         return !string.IsNullOrWhiteSpace(id) && !string.IsNullOrWhiteSpace(name);
+    }
+
+    private static bool IsMorningEmployeeHeaderRow(DataRow row)
+    {
+        for (var index = 0; index < row.ItemArray.Length; index++)
+        {
+            if (string.Equals(NormalizeLabel(GetCell(row, index)), "User ID", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string ReadLabelValue(DataRow row, string label)
