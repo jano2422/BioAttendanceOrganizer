@@ -65,6 +65,24 @@ public sealed class CorrectionPersistenceTests
     }
 
     [Fact]
+    public void LoadsDefaultRuleSettings()
+    {
+        var loaded = TempDatabase().LoadRules();
+
+        Assert.Equal(TimeSpan.FromMinutes(2), loaded.DuplicateTapWindow);
+        Assert.Equal(TimeSpan.FromHours(1), loaded.MinimumWorkDuration);
+        Assert.Equal(TimeSpan.FromHours(20), loaded.MaximumWorkDuration);
+        Assert.Equal(new TimeSpan(12, 0, 0), loaded.DayStartEnd);
+        Assert.Equal(new TimeSpan(12, 0, 0), loaded.DayEndStart);
+        Assert.Equal(new TimeSpan(4, 0, 0), loaded.DayEndEnd);
+        Assert.Equal(new TimeSpan(4, 0, 0), loaded.NightPairStart);
+        Assert.Equal(new TimeSpan(16, 0, 0), loaded.StrongNightStart);
+        Assert.Equal(new TimeSpan(10, 0, 0), loaded.NightEndEnd);
+        Assert.True(loaded.EnableCarryoverBoundaryDetection);
+        Assert.True(loaded.AutoApproveCleanNightShifts);
+    }
+
+    [Fact]
     public void SavesAndReloadsRuleSettings()
     {
         var database = TempDatabase();
@@ -103,7 +121,8 @@ public sealed class CorrectionPersistenceTests
         });
 
         var row = report.Records.Single(x => x.Status != AttendanceStatus.NoRecord);
-        Assert.Equal(AttendanceStatus.MissingOut, row.Status);
+        Assert.Equal(AttendanceStatus.MissingIn, row.Status);
+        Assert.DoesNotContain(IssueFlag.Carryover, row.Flags);
     }
 
     [Fact]

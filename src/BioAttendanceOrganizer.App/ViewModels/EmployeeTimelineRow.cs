@@ -22,7 +22,7 @@ public sealed class EmployeeTimelineRow
                                     Record.FinalStatus == AttendanceStatus.CarryoverToNextCutoff
         ? string.Empty
         : Record.IsOvernightShift
-            ? "Night shift"
+            ? "Extended"
             : string.Empty;
     public bool HasShiftBadge => !string.IsNullOrWhiteSpace(ShiftBadgeText);
     public string TimeInText => Record.TimeInText;

@@ -14,6 +14,7 @@ public sealed class PunchCorrectionServiceTests
     public void MovesPunchToCorrectDateAndRecomputesTimePair()
     {
         var workbook = Workbook(
+            DtrImportSlot.Morning,
             new DateTime(2026, 4, 1, 6, 0, 0),
             new DateTime(2026, 4, 3, 17, 0, 0));
         var draft = Draft(workbook);
@@ -213,6 +214,11 @@ public sealed class PunchCorrectionServiceTests
 
     private static BiometricWorkbook Workbook(params DateTime[] punches)
     {
+        return Workbook(DtrImportSlot.Night, punches);
+    }
+
+    private static BiometricWorkbook Workbook(DtrImportSlot slot, params DateTime[] punches)
+    {
         var employee = new EmployeeInfo("1", "Sample Employee", "SECURITY");
         var rawPunches = punches
             .Select((timestamp, index) => new RawPunch(
@@ -232,6 +238,7 @@ public sealed class PunchCorrectionServiceTests
             new DateOnly(2026, 4, 1),
             new DateOnly(2026, 4, 16),
             new[] { employee },
-            rawPunches);
+            rawPunches,
+            slot);
     }
 }

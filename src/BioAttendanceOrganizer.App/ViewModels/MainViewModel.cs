@@ -75,13 +75,13 @@ public sealed class MainViewModel : ObservableObject
     private string _editorAutoFlagsPreview = "-";
     private string _editorRawPunches = string.Empty;
     private string _duplicateTapMinutes = "2";
-    private string _minimumWorkHours = "4";
+    private string _minimumWorkHours = "1";
     private string _maximumWorkHours = "20";
     private string _dayStartEnd = "12:00";
     private string _dayEndStart = "12:00";
-    private string _dayEndEnd = "20:00";
-    private string _nightPairStart = "16:00";
-    private string _strongNightStart = "20:00";
+    private string _dayEndEnd = "04:00";
+    private string _nightPairStart = "04:00";
+    private string _strongNightStart = "16:00";
     private string _nightEndEnd = "10:00";
     private bool _enableCarryoverBoundaryDetection = true;
     private bool _autoApproveCleanNightShifts = true;
@@ -130,6 +130,7 @@ public sealed class MainViewModel : ObservableObject
         MarkSelectedDtrMissingInCommand = new RelayCommand(() => ApplySelectedDtrAction(CorrectionAction.MarkMissingIn, "DTR row marked missing Time In."), () => SelectedTimelineRow is not null);
         MarkSelectedDtrMissingOutCommand = new RelayCommand(() => ApplySelectedDtrAction(CorrectionAction.MarkMissingOut, "DTR row marked missing Time Out."), () => SelectedTimelineRow is not null);
         SaveRulesCommand = new RelayCommand(SaveRulesAndReanalyze);
+        ResetRulesCommand = new RelayCommand(ResetRulesToDefaults);
         PreviousWeekCommand = new RelayCommand(() => ShiftPunchWeek(-7));
         NextWeekCommand = new RelayCommand(() => ShiftPunchWeek(7));
         SelectPunchCommand = new RelayCommand<PunchCardViewModel>(SelectPunch);
@@ -190,6 +191,7 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand MarkSelectedDtrMissingInCommand { get; }
     public IRelayCommand MarkSelectedDtrMissingOutCommand { get; }
     public IRelayCommand SaveRulesCommand { get; }
+    public IRelayCommand ResetRulesCommand { get; }
     public IRelayCommand PreviousWeekCommand { get; }
     public IRelayCommand NextWeekCommand { get; }
     public IRelayCommand<PunchCardViewModel> SelectPunchCommand { get; }
@@ -1343,14 +1345,14 @@ public sealed class MainViewModel : ObservableObject
         PeriodText = $"{_report.Summary.PeriodStart:yyyy-MM-dd} to {_report.Summary.PeriodEnd:yyyy-MM-dd}";
         EmployeeCountText = _report.Summary.EmployeeCount.ToString(CultureInfo.InvariantCulture);
         RawPunchCountText = _report.Summary.RawPunchCount.ToString(CultureInfo.InvariantCulture);
-        CleanCountText = _report.Summary.CleanSessions.ToString(CultureInfo.InvariantCulture);
-        ReviewCountText = _report.Summary.IssueRows.ToString(CultureInfo.InvariantCulture);
+        Replace(EmployeeRows, _report.EmployeeSummaries.Select(x => new EmployeeReviewRow(x)));
+        EmployeeRowsView.Refresh();
+
+        CleanCountText = EmployeeRows.Count(x => !x.NeedsReview).ToString(CultureInfo.InvariantCulture);
+        ReviewCountText = EmployeeRows.Count(x => x.NeedsReview).ToString(CultureInfo.InvariantCulture);
         NightCountText = _report.Summary.NightSessions.ToString(CultureInfo.InvariantCulture);
         CarryoverCountText = _report.Summary.CarryoverRows.ToString(CultureInfo.InvariantCulture);
         MissingRecordCountText = _report.Summary.NoRecordRows.ToString(CultureInfo.InvariantCulture);
-
-        Replace(EmployeeRows, _report.EmployeeSummaries.Select(x => new EmployeeReviewRow(x)));
-        EmployeeRowsView.Refresh();
 
         SelectedEmployee = EmployeeRows.FirstOrDefault(x => x.EmployeeId == employeeToSelect) ??
                            EmployeeRows.FirstOrDefault(x => x.NeedsReview) ??
@@ -2120,6 +2122,15 @@ public sealed class MainViewModel : ObservableObject
         {
             MessageBox.Show(ex.Message, "Invalid settings", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void ResetRulesToDefaults()
+    {
+        LoadRuleFields(AttendanceRules.CreateDefault());
+        SaveRulesAndReanalyze();
+        StatusMessage = _workbook is null
+            ? "Recognition settings reset to defaults."
+            : "Recognition settings reset to defaults and DTR analysis refreshed.";
     }
 
     private bool FilterEmployee(object item)

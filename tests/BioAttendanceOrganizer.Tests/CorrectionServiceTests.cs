@@ -5,7 +5,7 @@ namespace BioAttendanceOrganizer.Tests;
 
 public sealed class CorrectionServiceTests
 {
-    private static readonly AttendanceRules Rules = new();
+    private static readonly AttendanceRules Rules = AttendanceRules.CreateDefault();
 
     [Fact]
     public void ApproveAsCorrectPreservesRecognizedTimesAndStatus()
@@ -87,7 +87,9 @@ public sealed class CorrectionServiceTests
         var timeIn = new DateTime(2026, 4, 1, 20, 0, 0);
         var timeOut = new DateTime(2026, 4, 2, 6, 0, 0);
 
-        CorrectionService.ApplyInlineEdit(record, timeIn, timeOut, Rules, string.Empty);
+        var rules = new AttendanceRules { MinimumWorkDuration = TimeSpan.FromHours(4) };
+
+        CorrectionService.ApplyInlineEdit(record, timeIn, timeOut, rules, string.Empty);
 
         Assert.Equal(AttendanceStatus.LikelyNightShift, record.FinalStatus);
         Assert.Equal(10, record.DurationHours.GetValueOrDefault(), precision: 2);
@@ -135,8 +137,9 @@ public sealed class CorrectionServiceTests
         var record = Record(null, null, AttendanceStatus.NeedsReview);
         var timeIn = new DateTime(2026, 4, 1, 8, 0, 0);
         var timeOut = new DateTime(2026, 4, 1, 9, 0, 0);
+        var rules = new AttendanceRules { MinimumWorkDuration = TimeSpan.FromHours(4) };
 
-        CorrectionService.ApplyInlineEdit(record, timeIn, timeOut, Rules, string.Empty);
+        CorrectionService.ApplyInlineEdit(record, timeIn, timeOut, rules, string.Empty);
 
         Assert.Equal(AttendanceStatus.TooShort, record.FinalStatus);
         Assert.Contains(IssueFlag.TooShort, CorrectionService.FlagsForStatus(record.FinalStatus));

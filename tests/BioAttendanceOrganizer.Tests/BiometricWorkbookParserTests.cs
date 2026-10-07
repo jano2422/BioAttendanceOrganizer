@@ -41,6 +41,70 @@ public sealed class BiometricWorkbookParserTests
     }
 
     [Fact]
+    public void MorningParserKeepsThreePunchesFromOneDayCell()
+    {
+        var dataSet = new DataSet();
+        var sheet = CreateSheet("Employee Attendance Record", 26);
+        dataSet.Tables.Add(sheet);
+
+        AddRow(sheet, "Attendance date:2026-05-16~2026-05-31");
+        AddRow(sheet, null, null, null, null, "User ID:", "157", null, null, null, null, "Name:", "Claveria, Marivic", null, null, null, null, null, null, null, null, null, null, "Department:", "Dayshift");
+        AddRow(sheet, null, 16, 17, 18);
+        AddRow(sheet, null, "05:06", "05:13", "00:05\n05:08\n19:14");
+
+        var workbook = BiometricWorkbookParser.ParseDataSet("morning.xls", dataSet);
+
+        var may18Punches = workbook.RawPunches
+            .Where(x => x.EmployeeId == "157" && x.Timestamp.Date == new DateTime(2026, 5, 18).Date)
+            .Select(x => x.Timestamp)
+            .ToList();
+
+        Assert.Equal(DtrImportSlot.Morning, workbook.DetectedSlot);
+        Assert.Equal(
+            [
+                new DateTime(2026, 5, 18, 0, 5, 0),
+                new DateTime(2026, 5, 18, 5, 8, 0),
+                new DateTime(2026, 5, 18, 19, 14, 0)
+            ],
+            may18Punches);
+    }
+
+    [Fact]
+    public void MorningParserKeepsPunchesFromOverflowRowsInEmployeeBlock()
+    {
+        var dataSet = new DataSet();
+        var sheet = CreateSheet("Employee Attendance Record", 26);
+        dataSet.Tables.Add(sheet);
+
+        AddRow(sheet, "Attendance date:2026-05-16~2026-05-31");
+        AddRow(sheet, null, null, null, null, "User ID:", "157", null, null, null, null, "Name:", "Claveria, Marivic", null, null, null, null, null, null, null, null, null, null, "Department:", "Dayshift");
+        AddRow(sheet, null, 16, 17, 18);
+        AddRow(sheet, null, "05:06", "05:13", "00:05\n05:08");
+        AddRow(sheet, null, null, null, "19:14");
+        AddRow(sheet, null, null, null, null, "User ID:", "159", null, null, null, null, "Name:", "Next Employee");
+        AddRow(sheet, null, 16, 17, 18);
+        AddRow(sheet, null, "06:00", null, null);
+
+        var workbook = BiometricWorkbookParser.ParseDataSet("morning.xls", dataSet);
+
+        var employee157Punches = workbook.RawPunches
+            .Where(x => x.EmployeeId == "157")
+            .Select(x => x.Timestamp)
+            .ToList();
+
+        Assert.Equal(
+            [
+                new DateTime(2026, 5, 16, 5, 6, 0),
+                new DateTime(2026, 5, 17, 5, 13, 0),
+                new DateTime(2026, 5, 18, 0, 5, 0),
+                new DateTime(2026, 5, 18, 5, 8, 0),
+                new DateTime(2026, 5, 18, 19, 14, 0)
+            ],
+            employee157Punches);
+        Assert.Contains(workbook.RawPunches, x => x.EmployeeId == "159" && x.Timestamp == new DateTime(2026, 5, 16, 6, 0, 0));
+    }
+
+    [Fact]
     public void MorningParserSkipsEmployeeBlocksWithoutIdOrName()
     {
         var dataSet = new DataSet();

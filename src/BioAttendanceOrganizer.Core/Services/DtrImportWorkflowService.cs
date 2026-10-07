@@ -40,9 +40,7 @@ public sealed class DtrImportWorkflowService
             .FirstOrDefault();
         if (allowedMatch is not null)
         {
-            var message = slot == DtrImportSlot.Morning
-                ? $"Morning Shift workbook covers a partial cutoff period ({workbook.PeriodStart:yyyy-MM-dd} to {workbook.PeriodEnd:yyyy-MM-dd})."
-                : $"Workbook includes night-shift boundary overlap ({workbook.PeriodStart:yyyy-MM-dd} to {workbook.PeriodEnd:yyyy-MM-dd}).";
+            var message = $"{FormatSlot(slot)} workbook covers a partial cutoff period ({workbook.PeriodStart:yyyy-MM-dd} to {workbook.PeriodEnd:yyyy-MM-dd}).";
 
             return ValidateInferredYear(
                 allowedMatch,
@@ -51,9 +49,7 @@ public sealed class DtrImportWorkflowService
         }
 
         var slotLabel = FormatSlot(slot);
-        var allowanceText = slot == DtrImportSlot.Morning
-            ? "Morning Shift workbooks may cover a partial period, but they must overlap a 1-15 or 16-end cutoff."
-            : "Night Shift workbooks must match a 1-15 or 16-end cutoff with the allowed one-day boundary overlap.";
+        var allowanceText = $"{slotLabel} workbooks may cover a partial period, but they must overlap a 1-15 or 16-end cutoff.";
 
         return DtrCutoffInferenceResult.Invalid(
             "DTR period does not match any cutoff",
@@ -88,13 +84,9 @@ public sealed class DtrImportWorkflowService
 
         if (!IsAllowedCutoffPeriod(workbook, selectedCutoff, slot))
         {
-            var allowanceText = slot == DtrImportSlot.Morning
-                ? "Morning Shift workbooks may be partial, but their dates must overlap the selected cutoff."
-                : "Workbooks may include a one-day boundary overlap for night-shift time-outs.";
-
             return DtrImportValidationResult.Invalid(
                 "DTR period does not match the selected cutoff",
-                $"Selected cutoff is {selectedCutoff.DisplayName}. {allowanceText} This workbook contains {workbook.PeriodStart:yyyy-MM-dd} to {workbook.PeriodEnd:yyyy-MM-dd}.");
+                $"Selected cutoff is {selectedCutoff.DisplayName}. {FormatSlot(slot)} workbooks may be partial, but their dates must overlap the selected cutoff. This workbook contains {workbook.PeriodStart:yyyy-MM-dd} to {workbook.PeriodEnd:yyyy-MM-dd}.");
         }
 
         var periodNote = BuildPeriodNote(workbook, selectedCutoff, slot);
@@ -111,20 +103,7 @@ public sealed class DtrImportWorkflowService
 
     private static bool IsAllowedCutoffPeriod(BiometricWorkbook workbook, CutoffPeriod selectedCutoff, DtrImportSlot slot)
     {
-        return slot == DtrImportSlot.Morning
-            ? OverlapDays(workbook.PeriodStart, workbook.PeriodEnd, selectedCutoff.StartDate, selectedCutoff.EndDate) > 0
-            : IsAllowedNightCutoffPeriod(workbook, selectedCutoff);
-    }
-
-    private static bool IsAllowedNightCutoffPeriod(BiometricWorkbook workbook, CutoffPeriod selectedCutoff)
-    {
-        var earliestAllowedStart = selectedCutoff.StartDate.AddDays(-1);
-        var latestAllowedEnd = selectedCutoff.EndDate.AddDays(1);
-
-        return workbook.PeriodStart >= earliestAllowedStart &&
-               workbook.PeriodStart <= selectedCutoff.StartDate &&
-               workbook.PeriodEnd >= selectedCutoff.EndDate &&
-               workbook.PeriodEnd <= latestAllowedEnd;
+        return OverlapDays(workbook.PeriodStart, workbook.PeriodEnd, selectedCutoff.StartDate, selectedCutoff.EndDate) > 0;
     }
 
     private static string BuildPeriodNote(BiometricWorkbook workbook, CutoffPeriod selectedCutoff, DtrImportSlot slot)
@@ -134,9 +113,7 @@ public sealed class DtrImportWorkflowService
             return "Workbook period matches the selected cutoff.";
         }
 
-        return slot == DtrImportSlot.Morning
-            ? $"Morning Shift workbook covers {workbook.PeriodStart:yyyy-MM-dd} to {workbook.PeriodEnd:yyyy-MM-dd}; checking will show that imported period only."
-            : $"Workbook includes night-shift boundary overlap ({workbook.PeriodStart:yyyy-MM-dd} to {workbook.PeriodEnd:yyyy-MM-dd}); checking will use raw DTR punches for {selectedCutoff.DisplayName}.";
+        return $"{FormatSlot(slot)} workbook covers {workbook.PeriodStart:yyyy-MM-dd} to {workbook.PeriodEnd:yyyy-MM-dd}; checking will show that imported period only.";
     }
 
     private static int OverlapDays(DateOnly firstStart, DateOnly firstEnd, DateOnly secondStart, DateOnly secondEnd)

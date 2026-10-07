@@ -7,8 +7,8 @@
         mc:Ignorable="d"
         Title="DTR Cutoff Checker"
         Icon="app_icon.png"
-        MinHeight="780"
-        MinWidth="1280"
+        MinHeight="520"
+        MinWidth="760"
         Height="900"
         Width="1500"
         FontFamily="Segoe UI"
@@ -387,7 +387,8 @@
         </Style>
     </Window.Resources>
 
-    <Grid>
+    <Viewbox Stretch="Uniform">
+    <Grid Width="1500" Height="900">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -1309,6 +1310,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Grid.ColumnSpan="3" Margin="0,0,0,16">
@@ -1346,16 +1348,24 @@
                     <TextBlock Grid.Row="9" Text="Night out until" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}"/>
                     <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding NightEndEnd}" Height="32" Margin="0,0,0,9"/>
 
-                    <StackPanel Grid.Row="10" Grid.ColumnSpan="2">
+                    <StackPanel Grid.Row="10" Grid.ColumnSpan="3">
                         <CheckBox Content="Detect cutoff overlap punches" IsChecked="{Binding EnableCarryoverBoundaryDetection}" Margin="0,8,0,9"/>
                         <CheckBox Content="Auto-mark clean night shifts ready" IsChecked="{Binding AutoApproveCleanNightShifts}"/>
                     </StackPanel>
-                    <Button Grid.Row="10" Grid.Column="2" Command="{Binding SaveRulesCommand}" HorizontalAlignment="Left" VerticalAlignment="Bottom">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Save &amp; Re-check" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
+                    <StackPanel Grid.Row="11" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,14,0,0">
+                        <Button Command="{Binding ResetRulesCommand}" Margin="0,0,10,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="Reset to Default" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding SaveRulesCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="Save &amp; Re-check" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>
@@ -1434,4 +1444,5 @@
             </Border>
         </Grid>
     </Grid>
+    </Viewbox>
 </Window>
