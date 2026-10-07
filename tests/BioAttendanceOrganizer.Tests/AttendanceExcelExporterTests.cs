@@ -166,6 +166,85 @@ public sealed class AttendanceExcelExporterTests
         Assert.Contains("workbook format is not supported", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(719, false, true)]
+    [InlineData(720, false, false)]
+    [InlineData(840, false, false)]
+    [InlineData(719, true, true)]
+    [InlineData(720, true, false)]
+    public void ExportColorsOnlyHoursBelowTwelveRed(int minutes, bool corrected, bool expectedRed)
+    {
+        var timeIn = new DateTime(2026, 5, 1, 20, 0, 0);
+        var record = new AttendanceRecord
+        {
+            EmployeeId = "6",
+            EmployeeName = "Hours Employee",
+            WorkDate = DateOnly.FromDateTime(timeIn),
+            TimeIn = timeIn,
+            TimeOut = timeIn.AddMinutes(corrected ? 840 : minutes),
+            CorrectionAction = corrected ? CorrectionAction.EditTimes : CorrectionAction.None,
+            CorrectedTimeIn = corrected ? timeIn : null,
+            CorrectedTimeOut = corrected ? timeIn.AddMinutes(minutes) : null,
+            Status = AttendanceStatus.LikelyNightShift
+        };
+        var path = Path.Combine(Path.GetTempPath(), $"dtr-export-{Guid.NewGuid():N}.xlsx");
+
+        try
+        {
+            new AttendanceExcelExporter().Export(Report(record), path, DtrImportSlot.Night, "May 1-15, 2026");
+
+            using var workbook = new XLWorkbook(path);
+            var cell = workbook.Worksheet(AttendanceExcelExporter.SheetName).Cell(9, 1);
+            var runs = cell.GetRichText().ToList();
+            var hoursRun = Assert.Single(runs, run => run.Text.StartsWith("H "));
+            Assert.Equal("H " + record.DurationText, hoursRun.Text);
+            Assert.Equal(expectedRed, hoursRun.FontColor.Equals(XLColor.Red));
+            Assert.All(runs.Where(run => !run.Text.StartsWith("H ")),
+                run => Assert.NotEqual(XLColor.Red, run.FontColor));
+            Assert.Contains("IN 05-01 20:00", cell.GetString());
+            Assert.Contains("OUT 05-02", cell.GetString());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void MultipleRecordsInOneCellKeepIndependentHoursColors()
+    {
+        var timeIn = new DateTime(2026, 5, 1, 0, 0, 0);
+        var report = Report(new[] { 6, 12 }.Select(hours => new AttendanceRecord
+        {
+            EmployeeId = "7",
+            EmployeeName = "Multiple Records Employee",
+            WorkDate = DateOnly.FromDateTime(timeIn),
+            TimeIn = timeIn,
+            TimeOut = timeIn.AddHours(hours),
+            Status = AttendanceStatus.CleanDayShift
+        }).ToArray());
+        var path = Path.Combine(Path.GetTempPath(), $"dtr-export-{Guid.NewGuid():N}.xlsx");
+
+        try
+        {
+            new AttendanceExcelExporter().Export(report, path, DtrImportSlot.Morning, "May 1-15, 2026");
+
+            using var workbook = new XLWorkbook(path);
+            var cell = workbook.Worksheet(AttendanceExcelExporter.SheetName).Cell(9, 1);
+            var hoursRuns = cell.GetRichText().Where(run => run.Text.StartsWith("H ")).ToList();
+            Assert.Equal(2, hoursRuns.Count);
+            Assert.Equal("H 6.00", hoursRuns[0].Text);
+            Assert.Equal(XLColor.Red, hoursRuns[0].FontColor);
+            Assert.Equal("H 12.00", hoursRuns[1].Text);
+            Assert.NotEqual(XLColor.Red, hoursRuns[1].FontColor);
+            Assert.Contains("H 6.00" + Environment.NewLine + Environment.NewLine + "IN", cell.GetString());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static AttendanceReport Report(params AttendanceRecord[] records)
     {
         var employees = records
