@@ -143,6 +143,7 @@ public sealed class AttendanceExcelExporter
 
             var completeRecords = dayRecords
                 .Where(record => record.FinalTimeIn.HasValue && record.FinalTimeOut.HasValue && record.DurationHours.HasValue)
+                .Select(FormatDayRecord)
                 .ToList();
             if (completeRecords.Count == 0)
             {
@@ -150,16 +151,7 @@ public sealed class AttendanceExcelExporter
             }
 
             var cell = sheet.Cell(row + 2, FirstDateColumn + index);
-            var richText = cell.CreateRichText();
-            for (var recordIndex = 0; recordIndex < completeRecords.Count; recordIndex++)
-            {
-                if (recordIndex > 0)
-                {
-                    richText.AddText(Environment.NewLine + Environment.NewLine);
-                }
-
-                AppendDayRecord(richText, completeRecords[recordIndex]);
-            }
+            cell.Value = string.Join(Environment.NewLine + Environment.NewLine, completeRecords);
             cell.Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
             cell.Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
             cell.Style.Alignment.SetWrapText();
@@ -184,21 +176,17 @@ public sealed class AttendanceExcelExporter
         range.FirstCell().Value = value;
     }
 
-    private static void AppendDayRecord(IXLRichText richText, AttendanceRecord record)
+    private static string FormatDayRecord(AttendanceRecord record)
     {
         var timeIn = record.FinalTimeIn!.Value;
         var timeOut = record.FinalTimeOut!.Value;
         var hours = record.DurationHours!.Value.ToString("0.00", CultureInfo.InvariantCulture);
         var crossesDate = timeIn.Date != timeOut.Date;
-        richText.AddText(string.Join(
+        return string.Join(
             Environment.NewLine,
             "IN " + FormatTime(timeIn, crossesDate),
-            "OUT " + FormatTime(timeOut, crossesDate)) + Environment.NewLine);
-        var hoursText = richText.AddText("H " + hours);
-        if (record.DurationHours.Value < 12)
-        {
-            hoursText.SetFontColor(XLColor.Red);
-        }
+            "OUT " + FormatTime(timeOut, crossesDate),
+            "H " + hours);
     }
 
     private static string FormatTime(DateTime value, bool includeDate)
